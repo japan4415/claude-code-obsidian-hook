@@ -90,15 +90,25 @@ class TestLaunchReflect:
         assert call_kwargs[1]["start_new_session"] is True
 
 
+    def test_passes_skip_analysis_env(self):
+        with patch("claude_obsidian_hook.save.subprocess.Popen") as mock_popen:
+            _launch_reflect("/path/to/transcript", "sess1", "coding/history/test.md")
+
+        call_kwargs = mock_popen.call_args[1]
+        assert "env" in call_kwargs
+        assert call_kwargs["env"]["CLAUDE_SKIP_ANALYSIS"] == "1"
+
+
 class TestMain:
-    def test_stop_hook_active_exits(self):
-        data = {"stop_hook_active": True}
+    def test_skip_analysis_env_exits(self, monkeypatch):
+        monkeypatch.setenv("CLAUDE_SKIP_ANALYSIS", "1")
         with (
-            patch("sys.stdin", StringIO(json.dumps(data))),
+            patch("claude_obsidian_hook.save._read_hook_input") as mock_read,
             pytest.raises(SystemExit) as exc_info,
         ):
             main()
         assert exc_info.value.code == 0
+        mock_read.assert_not_called()
 
     def test_missing_transcript_path_exits(self):
         data = {"stop_hook_active": False, "transcript_path": ""}
