@@ -12,7 +12,7 @@ VENV_DIR="${PLUGIN_DATA}/venv"
 # 初回または pyproject.toml が更新された場合のみ再インストール
 if ! diff -q "${PLUGIN_ROOT}/pyproject.toml" "${PLUGIN_DATA}/pyproject.toml.cache" >/dev/null 2>&1; then
     uv venv "${VENV_DIR}"
-    uv sync --project "${PLUGIN_ROOT}" --python "${VENV_DIR}/bin/python"
+    VIRTUAL_ENV="${VENV_DIR}" uv pip install --compile-bytecode "${PLUGIN_ROOT}"
     cp "${PLUGIN_ROOT}/pyproject.toml" "${PLUGIN_DATA}/pyproject.toml.cache"
 fi
 
