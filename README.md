@@ -40,7 +40,7 @@ bash install.sh
 |--------|------|-----------|
 | `OBSIDIAN_CLI` | Obsidian CLIの実行パス | `/usr/local/bin/obsidian` |
 | `CLAUDE_CLI` | Claude CLIの実行パス | `/usr/local/bin/claude` |
-| `CLAUDE_SKIP_ANALYSIS` | `1` に設定すると振り返り生成をスキップ（再帰防止用） | 未設定 |
+| `CLAUDE_SKIP_ANALYSIS` | `1` に設定するとセッション保存・振り返り生成をすべてスキップ（主に再帰防止用の内部フラグ） | 未設定 |
 | `CLAUDE_PLUGIN_ROOT` | プラグインのインストールディレクトリ（Marketplace用） | — |
 | `CLAUDE_PLUGIN_DATA` | プラグインの永続データディレクトリ（Marketplace用） | — |
 | `CLAUDE_OBSIDIAN_HOOK_ROOT` | プロジェクトルートパスの上書き | — |
