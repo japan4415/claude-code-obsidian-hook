@@ -61,7 +61,7 @@ def _obsidian_command(action: str, **kwargs: str) -> subprocess.CompletedProcess
         cmd,
         capture_output=True,
         text=True,
-        timeout=30,
+        timeout=10,
     )
 
 
@@ -97,11 +97,13 @@ def generate_reflection(transcript_text: str) -> str:
         生成された振り返りテキスト.
     """
     prompt = _build_prompt(transcript_text)
+    env = {**os.environ, "CLAUDE_SKIP_ANALYSIS": "1"}
     result = subprocess.run(
         [CLAUDE_CLI, "-p", prompt, "--model", "claude-haiku-4-5-20251001"],
         capture_output=True,
         text=True,
         timeout=120,
+        env=env,
     )
     if result.returncode != 0:
         msg = f"claude CLI failed: {result.stderr}"
@@ -208,7 +210,7 @@ def run_reflection(
     """振り返り処理のメインフロー.
 
     Args:
-        transcript_path: JONLファイルのパス.
+        transcript_path: JSONLファイルのパス.
         session_id: セッションID.
         obsidian_history_path: Obsidian上のhistoryノートパス.
     """
@@ -254,7 +256,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Claude Codeセッションの振り返りを生成してObsidianに保存する"
     )
-    parser.add_argument("transcript_path", help="JONLファイルのパス")
+    parser.add_argument("transcript_path", help="JSONLファイルのパス")
     parser.add_argument("session_id", help="セッションID")
     parser.add_argument(
         "obsidian_history_path",
