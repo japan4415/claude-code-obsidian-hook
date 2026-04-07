@@ -24,6 +24,7 @@ from claude_obsidian_hook.transcript import (
 logger = logging.getLogger(__name__)
 
 OBSIDIAN_CLI = os.environ.get("OBSIDIAN_CLI", "/usr/local/bin/obsidian")
+OBSIDIAN_HISTORY_PATH = os.environ.get("OBSIDIAN_HISTORY_PATH", "coding/history")
 
 
 def _read_hook_input() -> dict:
@@ -95,6 +96,7 @@ def _launch_reflect(
         "CLAUDE_OBSIDIAN_HOOK_ROOT"
     )
     cwd = Path(project_root) if project_root else None
+    env = {**os.environ, "CLAUDE_SKIP_ANALYSIS": "1"}
     subprocess.Popen(
         [
             sys.executable,
@@ -108,6 +110,7 @@ def _launch_reflect(
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         start_new_session=True,
+        env=env,
     )
 
 
@@ -137,7 +140,7 @@ def main() -> None:
 
         # Obsidianに保存
         timestamp = _generate_timestamp_filename()
-        obsidian_path = f"coding/history/{timestamp}.md"
+        obsidian_path = f"{OBSIDIAN_HISTORY_PATH}/{timestamp}.md"
         _save_to_obsidian(obsidian_path, markdown)
 
         # reflect.pyをバックグラウンドで起動
