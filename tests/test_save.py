@@ -163,6 +163,55 @@ class TestMain:
         mock_run.assert_called_once()
         mock_popen.assert_called_once()
 
+    def test_skip_queue_operation_session(self, tmp_path):
+        """claude -p由来のセッション（先頭がqueue-operation）はスキップされる."""
+        jsonl_data = [
+            {
+                "type": "queue-operation",
+                "operation": "enqueue",
+                "timestamp": "2026-04-07T10:00:00Z",
+                "sessionId": "reflect-sess",
+            },
+            {
+                "type": "user",
+                "uuid": "1",
+                "timestamp": "2026-04-07T10:00:01Z",
+                "message": {"role": "user", "content": "振り返りプロンプト"},
+            },
+            {
+                "type": "assistant",
+                "uuid": "2",
+                "message": {
+                    "role": "assistant",
+                    "model": "claude-haiku-4-5-20251001",
+                    "content": [{"type": "text", "text": "振り返り結果"}],
+                    "usage": {"input_tokens": 100, "output_tokens": 50},
+                },
+            },
+        ]
+        transcript = tmp_path / "reflect.jsonl"
+        transcript.write_text("\n".join(json.dumps(d) for d in jsonl_data))
+
+        hook_input = {
+            "stop_hook_active": False,
+            "session_id": "reflect-sess",
+            "transcript_path": str(transcript),
+            "cwd": "/project",
+        }
+
+        with (
+            patch("sys.stdin", StringIO(json.dumps(hook_input))),
+            patch("claude_obsidian_hook.save.subprocess.run") as mock_run,
+            patch("claude_obsidian_hook.save.subprocess.Popen") as mock_popen,
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            main()
+
+        assert exc_info.value.code == 0
+        # Obsidian保存もreflect起動も呼ばれないこと
+        mock_run.assert_not_called()
+        mock_popen.assert_not_called()
+
     def test_main_error_handling(self, tmp_path):
         jsonl_data = [
             {

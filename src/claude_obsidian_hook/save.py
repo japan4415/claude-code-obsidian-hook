@@ -133,6 +133,17 @@ def main() -> None:
     try:
         # transcript解析
         records = parse_transcript(transcript_path)
+
+        # 無限ループ防止(フォールバック): CLAUDE_SKIP_ANALYSISが伝播しない場合の安全網
+        # claude -p由来のセッションはtranscript先頭がqueue-operationになる
+        if records and records[0].get("type") == "queue-operation":
+            logger.info(
+                "claude -p由来のセッションを検出。スキップします。"
+                "(session_id=%s)",
+                session_id,
+            )
+            sys.exit(0)
+
         messages = extract_messages(records)
         metadata = extract_metadata(records)
         markdown = format_as_markdown(messages, metadata)
