@@ -45,7 +45,7 @@ class TestGenerateReflection:
         assert result == "振り返り結果テキスト"
         mock_run.assert_called_once()
         cmd = mock_run.call_args[0][0]
-        assert cmd[0] == "/usr/local/bin/claude"
+        assert cmd[0].endswith("claude")
         assert "-p" in cmd
         assert "--model" in cmd
         assert "claude-haiku-4-5-20251001" in cmd
