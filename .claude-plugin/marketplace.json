@@ -1,0 +1,17 @@
+{
+  "name": "obsidian-tools",
+  "owner": {
+    "name": "Yoshihiko Kato",
+    "email": "raiden000discord@gmail.com"
+  },
+  "plugins": [
+    {
+      "name": "claude-obsidian-hook",
+      "source": {
+        "source": "github",
+        "repo": "japan4415/claude-code-obsidian-hook"
+      },
+      "description": "Claude Code hook for Obsidian integration"
+    }
+  ]
+}
