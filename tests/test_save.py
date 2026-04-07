@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
+import time
 from io import StringIO
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from claude_obsidian_hook.save import (
+    _acquire_session_lock,
+    _cleanup_stale_locks,
     _escape_for_obsidian,
     _generate_timestamp_filename,
     _launch_reflect,
@@ -99,6 +104,62 @@ class TestLaunchReflect:
         assert call_kwargs["env"]["CLAUDE_SKIP_ANALYSIS"] == "1"
 
 
+class TestAcquireSessionLock:
+    def test_first_call_returns_true(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("claude_obsidian_hook.save._LOCK_DIR", tmp_path)
+        assert _acquire_session_lock("sess1") is True
+        assert (tmp_path / "sess1.lock").exists()
+
+    def test_second_call_returns_false(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("claude_obsidian_hook.save._LOCK_DIR", tmp_path)
+        assert _acquire_session_lock("sess1") is True
+        assert _acquire_session_lock("sess1") is False
+
+    def test_different_sessions_independent(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("claude_obsidian_hook.save._LOCK_DIR", tmp_path)
+        assert _acquire_session_lock("sess1") is True
+        assert _acquire_session_lock("sess2") is True
+
+    def test_creates_lock_dir(self, tmp_path, monkeypatch):
+        lock_dir = tmp_path / "subdir" / "locks"
+        monkeypatch.setattr("claude_obsidian_hook.save._LOCK_DIR", lock_dir)
+        assert _acquire_session_lock("sess1") is True
+        assert lock_dir.exists()
+
+    def test_returns_true_on_permission_error(self, tmp_path, monkeypatch):
+        """権限エラー時はTrueを返して処理を続行する."""
+        monkeypatch.setattr("claude_obsidian_hook.save._LOCK_DIR", tmp_path)
+        with patch.object(Path, "touch", side_effect=PermissionError("denied")):
+            assert _acquire_session_lock("sess1") is True
+
+
+class TestCleanupStaleLocks:
+    def test_removes_old_locks(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("claude_obsidian_hook.save._LOCK_DIR", tmp_path)
+        lock_file = tmp_path / "old.lock"
+        lock_file.touch()
+        # 2日前に設定
+        old_time = time.time() - 2 * 86400
+        os.utime(lock_file, (old_time, old_time))
+
+        _cleanup_stale_locks()
+        assert not lock_file.exists()
+
+    def test_keeps_recent_locks(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("claude_obsidian_hook.save._LOCK_DIR", tmp_path)
+        lock_file = tmp_path / "recent.lock"
+        lock_file.touch()
+
+        _cleanup_stale_locks()
+        assert lock_file.exists()
+
+    def test_no_error_when_dir_missing(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(
+            "claude_obsidian_hook.save._LOCK_DIR", tmp_path / "nonexistent"
+        )
+        _cleanup_stale_locks()  # should not raise
+
+
 class TestMain:
     def test_skip_analysis_env_exits(self, monkeypatch):
         monkeypatch.setenv("CLAUDE_SKIP_ANALYSIS", "1")
@@ -119,7 +180,10 @@ class TestMain:
             main()
         assert exc_info.value.code == 0
 
-    def test_main_flow(self, tmp_path):
+    def test_main_flow(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(
+            "claude_obsidian_hook.save._LOCK_DIR", tmp_path / "locks"
+        )
         jsonl_data = [
             {
                 "type": "user",
@@ -163,8 +227,11 @@ class TestMain:
         mock_run.assert_called_once()
         mock_popen.assert_called_once()
 
-    def test_skip_queue_operation_session(self, tmp_path):
+    def test_skip_queue_operation_session(self, tmp_path, monkeypatch):
         """claude -p由来のセッション（先頭がqueue-operation）はスキップされる."""
+        monkeypatch.setattr(
+            "claude_obsidian_hook.save._LOCK_DIR", tmp_path / "locks"
+        )
         jsonl_data = [
             {
                 "type": "queue-operation",
@@ -212,7 +279,68 @@ class TestMain:
         mock_run.assert_not_called()
         mock_popen.assert_not_called()
 
-    def test_main_error_handling(self, tmp_path):
+    def test_skip_duplicate_session(self, tmp_path, monkeypatch):
+        """同一セッションIDの2回目実行はスキップされる."""
+        lock_dir = tmp_path / "locks"
+        monkeypatch.setattr("claude_obsidian_hook.save._LOCK_DIR", lock_dir)
+
+        jsonl_data = [
+            {
+                "type": "user",
+                "uuid": "1",
+                "timestamp": "2026-04-07T10:00:00Z",
+                "sessionId": "dup-sess",
+                "cwd": "/project",
+                "message": {"role": "user", "content": "Hello"},
+            },
+            {
+                "type": "assistant",
+                "uuid": "2",
+                "message": {
+                    "role": "assistant",
+                    "model": "claude-sonnet-4-6",
+                    "content": [{"type": "text", "text": "Hi!"}],
+                    "usage": {"input_tokens": 10, "output_tokens": 5},
+                },
+            },
+        ]
+        transcript = tmp_path / "test.jsonl"
+        transcript.write_text("\n".join(json.dumps(d) for d in jsonl_data))
+
+        hook_input = {
+            "stop_hook_active": False,
+            "session_id": "dup-sess",
+            "transcript_path": str(transcript),
+            "cwd": "/project",
+        }
+
+        # 1回目: 正常実行
+        with (
+            patch("sys.stdin", StringIO(json.dumps(hook_input))),
+            patch("claude_obsidian_hook.save.subprocess.run") as mock_run,
+            patch("claude_obsidian_hook.save.subprocess.Popen"),
+            pytest.raises(SystemExit),
+        ):
+            mock_run.return_value = MagicMock(returncode=0)
+            main()
+
+        # 2回目: スキップ
+        with (
+            patch("sys.stdin", StringIO(json.dumps(hook_input))),
+            patch("claude_obsidian_hook.save.subprocess.run") as mock_run2,
+            patch("claude_obsidian_hook.save.subprocess.Popen") as mock_popen2,
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            main()
+
+        assert exc_info.value.code == 0
+        mock_run2.assert_not_called()
+        mock_popen2.assert_not_called()
+
+    def test_main_error_handling(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(
+            "claude_obsidian_hook.save._LOCK_DIR", tmp_path / "locks"
+        )
         jsonl_data = [
             {
                 "type": "user",
