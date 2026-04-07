@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/run_hook.sh",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

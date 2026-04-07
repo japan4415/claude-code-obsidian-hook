@@ -1,0 +1,10 @@
+{
+  "name": "claude-obsidian-hook",
+  "description": "Claude Code hook for Obsidian integration - saves session history and generates reflections",
+  "version": "0.1.0",
+  "author": {
+    "name": "Yoshihiko Kato",
+    "email": "raiden000discord@gmail.com"
+  },
+  "repository": "https://github.com/japan4415/claude-code-obsidian-hook"
+}
