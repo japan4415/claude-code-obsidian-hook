@@ -14,6 +14,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from claude_obsidian_hook.config import OBSIDIAN_CLI
 from claude_obsidian_hook.transcript import (
     extract_messages,
     extract_metadata,
@@ -22,8 +23,6 @@ from claude_obsidian_hook.transcript import (
 )
 
 logger = logging.getLogger(__name__)
-
-OBSIDIAN_CLI = os.environ.get("OBSIDIAN_CLI", "/usr/local/bin/obsidian")
 
 
 def _read_hook_input() -> dict:
@@ -76,6 +75,7 @@ def _save_to_obsidian(note_path: str, content: str) -> None:
         ],
         check=True,
         capture_output=True,
+        timeout=10,
     )
 
 
@@ -95,6 +95,7 @@ def _launch_reflect(
         "CLAUDE_OBSIDIAN_HOOK_ROOT"
     )
     cwd = Path(project_root) if project_root else None
+    env = {**os.environ, "CLAUDE_SKIP_ANALYSIS": "1"}
     subprocess.Popen(
         [
             sys.executable,
@@ -108,6 +109,7 @@ def _launch_reflect(
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         start_new_session=True,
+        env=env,
     )
 
 
