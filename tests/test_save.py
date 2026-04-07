@@ -91,14 +91,15 @@ class TestLaunchReflect:
 
 
 class TestMain:
-    def test_stop_hook_active_exits(self):
-        data = {"stop_hook_active": True}
+    def test_skip_analysis_env_exits(self, monkeypatch):
+        monkeypatch.setenv("CLAUDE_SKIP_ANALYSIS", "1")
         with (
-            patch("sys.stdin", StringIO(json.dumps(data))),
+            patch("claude_obsidian_hook.save._read_hook_input") as mock_read,
             pytest.raises(SystemExit) as exc_info,
         ):
             main()
         assert exc_info.value.code == 0
+        mock_read.assert_not_called()
 
     def test_missing_transcript_path_exits(self):
         data = {"stop_hook_active": False, "transcript_path": ""}
