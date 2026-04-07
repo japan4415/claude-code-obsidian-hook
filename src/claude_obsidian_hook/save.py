@@ -14,6 +14,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from claude_obsidian_hook.config import OBSIDIAN_CLI, OBSIDIAN_HISTORY_PATH
 from claude_obsidian_hook.transcript import (
     extract_messages,
     extract_metadata,
@@ -22,9 +23,6 @@ from claude_obsidian_hook.transcript import (
 )
 
 logger = logging.getLogger(__name__)
-
-OBSIDIAN_CLI = os.environ.get("OBSIDIAN_CLI", "/usr/local/bin/obsidian")
-OBSIDIAN_HISTORY_PATH = os.environ.get("OBSIDIAN_HISTORY_PATH", "coding/history")
 
 
 def _read_hook_input() -> dict:
@@ -77,6 +75,7 @@ def _save_to_obsidian(note_path: str, content: str) -> None:
         ],
         check=True,
         capture_output=True,
+        timeout=10,
     )
 
 

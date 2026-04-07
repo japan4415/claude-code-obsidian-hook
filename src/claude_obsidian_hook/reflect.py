@@ -17,6 +17,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from claude_obsidian_hook.config import CLAUDE_CLI, OBSIDIAN_CLI
 from claude_obsidian_hook.transcript import (
     extract_messages,
     extract_metadata,
@@ -24,13 +25,26 @@ from claude_obsidian_hook.transcript import (
     parse_transcript,
 )
 
-CLAUDE_CLI = os.environ.get("CLAUDE_CLI", "/usr/local/bin/claude")
-OBSIDIAN_CLI = os.environ.get("OBSIDIAN_CLI", "/usr/local/bin/obsidian")
 REFLECTIONS_PATH = "coding/reflections.md"
 LOG_DIR = Path.home() / ".claude" / "logs"
 LOG_FILE = LOG_DIR / "obsidian-hook.log"
 
 logger = logging.getLogger(__name__)
+
+
+def _escape_for_obsidian(content: str) -> str:
+    """Obsidian CLIのcontentパラメータ用にエスケープする.
+
+    改行を ``\\n`` リテラルに変換する。
+    save.pyの同名関数と同じロジック。
+
+    Args:
+        content: エスケープ対象の文字列.
+
+    Returns:
+        エスケープ済み文字列.
+    """
+    return content.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
 
 
 def _setup_logging() -> None:
@@ -61,7 +75,7 @@ def _obsidian_command(action: str, **kwargs: str) -> subprocess.CompletedProcess
         cmd,
         capture_output=True,
         text=True,
-        timeout=30,
+        timeout=10,
     )
 
 
@@ -136,8 +150,12 @@ def append_reflection_to_history(obsidian_history_path: str, reflection: str) ->
         obsidian_history_path: Obsidian上のhistoryノートパス.
         reflection: 振り返りテキスト.
     """
-    content = f"\\n## 振り返り\\n{reflection}"
-    result = _obsidian_command("append", path=obsidian_history_path, content=content)
+    content = f"\n## 振り返り\n{reflection}"
+    result = _obsidian_command(
+        "append",
+        path=obsidian_history_path,
+        content=_escape_for_obsidian(content),
+    )
     if result.returncode != 0:
         logger.error("historyノートへの追記に失敗: %s", result.stderr)
     else:
@@ -152,7 +170,9 @@ def _ensure_reflections_note() -> None:
         create_result = _obsidian_command(
             "create",
             path=REFLECTIONS_PATH,
-            content="# 振り返りログ\\n\\nセッションごとの教訓を蓄積する。\\n",
+            content=_escape_for_obsidian(
+                "# 振り返りログ\n\nセッションごとの教訓を蓄積する。\n"
+            ),
         )
         if create_result.returncode != 0:
             logger.error("reflections.mdの作成に失敗: %s", create_result.stderr)
@@ -167,8 +187,12 @@ def append_lesson_to_reflections(date: str, summary: str, lesson: str) -> None:
         lesson: 教訓テキスト.
     """
     _ensure_reflections_note()
-    content = f"\\n### {date} - {summary}\\n{lesson}"
-    result = _obsidian_command("append", path=REFLECTIONS_PATH, content=content)
+    content = f"\n### {date} - {summary}\n{lesson}"
+    result = _obsidian_command(
+        "append",
+        path=REFLECTIONS_PATH,
+        content=_escape_for_obsidian(content),
+    )
     if result.returncode != 0:
         logger.error("reflections.mdへの追記に失敗: %s", result.stderr)
     else:

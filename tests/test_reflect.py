@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from claude_obsidian_hook.reflect import (
+    _escape_for_obsidian,
     _extract_lesson_from_reflection,
     _extract_summary_from_reflection,
     append_lesson_to_reflections,
@@ -15,6 +16,20 @@ from claude_obsidian_hook.reflect import (
     generate_reflection,
     run_reflection,
 )
+
+
+class TestEscapeForObsidian:
+    def test_escape_newlines(self):
+        assert _escape_for_obsidian("行1\n行2") == "行1\\n行2"
+
+    def test_escape_backslashes(self):
+        assert _escape_for_obsidian("C:\\Users") == "C:\\\\Users"
+
+    def test_escape_double_quotes(self):
+        assert _escape_for_obsidian('"quoted"') == '\\"quoted\\"'
+
+    def test_no_escape_needed(self):
+        assert _escape_for_obsidian("plain text") == "plain text"
 
 
 class TestGenerateReflection:
@@ -34,6 +49,19 @@ class TestGenerateReflection:
         assert "-p" in cmd
         assert "--model" in cmd
         assert "claude-haiku-4-5-20251001" in cmd
+
+    def test_passes_skip_analysis_env(self):
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "結果"
+
+        with patch("claude_obsidian_hook.reflect.subprocess.run") as mock_run:
+            mock_run.return_value = mock_result
+            generate_reflection("test")
+
+        call_kwargs = mock_run.call_args[1]
+        assert "env" in call_kwargs
+        assert call_kwargs["env"]["CLAUDE_SKIP_ANALYSIS"] == "1"
 
     def test_api_failure_handling(self):
         mock_result = MagicMock()
@@ -66,15 +94,40 @@ class TestAppendReflectionToHistory:
             content="\\n## 振り返り\\n振り返りテキスト",
         )
 
+    def test_escape_newlines_in_reflection(self):
+        """改行を含む振り返りテキストがエスケープされること."""
+        with patch("claude_obsidian_hook.reflect._obsidian_command") as mock_cmd:
+            mock_cmd.return_value = MagicMock(returncode=0)
+            append_reflection_to_history(
+                "coding/history/test.md",
+                "行1\n行2\n行3",
+            )
+
+        actual_content = mock_cmd.call_args[1]["content"]
+        assert "\n" not in actual_content
+        assert "\\n" in actual_content
+
+    def test_escape_backslashes_and_quotes(self):
+        """バックスラッシュとダブルクォートがエスケープされること."""
+        with patch("claude_obsidian_hook.reflect._obsidian_command") as mock_cmd:
+            mock_cmd.return_value = MagicMock(returncode=0)
+            append_reflection_to_history(
+                "coding/history/test.md",
+                'path: C:\\Users\\test "quoted"',
+            )
+
+        actual_content = mock_cmd.call_args[1]["content"]
+        assert '\\"' in actual_content
+        assert "\\\\" in actual_content
+
 
 class TestAppendLessonToReflections:
     def test_update_reflections_file_create(self):
         with patch("claude_obsidian_hook.reflect._obsidian_command") as mock_cmd:
-            # read fails (not found) -> create -> append
             mock_cmd.side_effect = [
-                MagicMock(returncode=1),  # read: not found
-                MagicMock(returncode=0),  # create
-                MagicMock(returncode=0),  # append
+                MagicMock(returncode=1),
+                MagicMock(returncode=0),
+                MagicMock(returncode=0),
             ]
             append_lesson_to_reflections("2026-04-07", "概要", "教訓")
 
@@ -85,16 +138,51 @@ class TestAppendLessonToReflections:
 
     def test_update_reflections_file_append(self):
         with patch("claude_obsidian_hook.reflect._obsidian_command") as mock_cmd:
-            # read succeeds (exists) -> append
             mock_cmd.side_effect = [
-                MagicMock(returncode=0),  # read: found
-                MagicMock(returncode=0),  # append
+                MagicMock(returncode=0),
+                MagicMock(returncode=0),
             ]
             append_lesson_to_reflections("2026-04-07", "概要", "教訓")
 
         assert mock_cmd.call_count == 2
         assert mock_cmd.call_args_list[0][0][0] == "read"
         assert mock_cmd.call_args_list[1][0][0] == "append"
+
+    def test_escape_content_with_newlines(self):
+        """教訓テキストに改行が含まれる場合にエスケープされること."""
+        with patch("claude_obsidian_hook.reflect._obsidian_command") as mock_cmd:
+            mock_cmd.side_effect = [
+                MagicMock(returncode=0),
+                MagicMock(returncode=0),
+            ]
+            append_lesson_to_reflections(
+                "2026-04-07",
+                "概要",
+                "教訓1\n教訓2\n教訓3",
+            )
+
+        append_call = mock_cmd.call_args_list[1]
+        actual_content = append_call[1]["content"]
+        assert "\n" not in actual_content
+        assert "\\n" in actual_content
+
+
+class TestEnsureReflectionsNote:
+    def test_create_with_escaped_content(self):
+        """reflections.md作成時のcontentがエスケープされること."""
+        with patch("claude_obsidian_hook.reflect._obsidian_command") as mock_cmd:
+            mock_cmd.side_effect = [
+                MagicMock(returncode=1),
+                MagicMock(returncode=0),
+                MagicMock(returncode=0),
+            ]
+            append_lesson_to_reflections("2026-04-07", "概要", "教訓")
+
+        create_call = mock_cmd.call_args_list[1]
+        actual_content = create_call[1]["content"]
+        assert "\n" not in actual_content
+        assert "\\n" in actual_content
+        assert "# 振り返りログ" in actual_content
 
 
 class TestExtractHelpers:
@@ -163,7 +251,6 @@ class TestRunReflection:
             run_reflection(str(transcript), "sess1", "coding/history/test.md")
 
         mock_run.assert_called_once()
-        # append to history + read reflections + append to reflections = 3
         assert mock_cmd.call_count == 3
 
     def test_empty_transcript(self, tmp_path):
