@@ -23,7 +23,7 @@ from claude_obsidian_hook.transcript import (
 
 logger = logging.getLogger(__name__)
 
-OBSIDIAN_CLI = "/usr/local/bin/obsidian"
+OBSIDIAN_CLI = os.environ.get("OBSIDIAN_CLI", "/usr/local/bin/obsidian")
 
 
 def _read_hook_input() -> dict:
@@ -91,7 +91,9 @@ def _launch_reflect(
         session_id: セッションID.
         obsidian_history_path: Obsidianに保存したノートのパス.
     """
-    project_root = os.environ.get("CLAUDE_OBSIDIAN_HOOK_ROOT")
+    project_root = os.environ.get("CLAUDE_PLUGIN_ROOT") or os.environ.get(
+        "CLAUDE_OBSIDIAN_HOOK_ROOT"
+    )
     cwd = Path(project_root) if project_root else None
     subprocess.Popen(
         [
@@ -113,11 +115,11 @@ def main() -> None:
     """Stop hookのメインエントリポイント."""
     logging.basicConfig(level=logging.INFO)
 
-    hook_input = _read_hook_input()
-
-    # 無限ループ防止
-    if hook_input.get("stop_hook_active"):
+    # 無限ループ防止: 振り返り生成セッション自身のStop hookをスキップする
+    if os.getenv("CLAUDE_SKIP_ANALYSIS") == "1":
         sys.exit(0)
+
+    hook_input = _read_hook_input()
 
     transcript_path = hook_input.get("transcript_path", "")
     session_id = hook_input.get("session_id", "")
