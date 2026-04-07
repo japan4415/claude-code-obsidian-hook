@@ -95,6 +95,7 @@ def _launch_reflect(
         "CLAUDE_OBSIDIAN_HOOK_ROOT"
     )
     cwd = Path(project_root) if project_root else None
+    env = {**os.environ, "CLAUDE_SKIP_ANALYSIS": "1"}
     subprocess.Popen(
         [
             sys.executable,
@@ -108,6 +109,7 @@ def _launch_reflect(
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         start_new_session=True,
+        env=env,
     )
 
 

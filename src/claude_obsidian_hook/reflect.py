@@ -97,11 +97,13 @@ def generate_reflection(transcript_text: str) -> str:
         生成された振り返りテキスト.
     """
     prompt = _build_prompt(transcript_text)
+    env = {**os.environ, "CLAUDE_SKIP_ANALYSIS": "1"}
     result = subprocess.run(
         [CLAUDE_CLI, "-p", prompt, "--model", "claude-haiku-4-5-20251001"],
         capture_output=True,
         text=True,
         timeout=120,
+        env=env,
     )
     if result.returncode != 0:
         msg = f"claude CLI failed: {result.stderr}"
