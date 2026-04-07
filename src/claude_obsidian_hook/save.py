@@ -11,6 +11,8 @@ import logging
 import os
 import subprocess
 import sys
+import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -23,6 +25,46 @@ from claude_obsidian_hook.transcript import (
 )
 
 logger = logging.getLogger(__name__)
+
+_LOCK_DIR = Path(tempfile.gettempdir()) / "claude-obsidian-hook"
+_LOCK_MAX_AGE_SECONDS = 86400  # 1日
+
+
+def _cleanup_stale_locks() -> None:
+    """有効期限切れのロックファイルを削除する."""
+    if not _LOCK_DIR.exists():
+        return
+    now = time.time()
+    for lock_file in _LOCK_DIR.glob("*.lock"):
+        try:
+            if now - lock_file.stat().st_mtime > _LOCK_MAX_AGE_SECONDS:
+                lock_file.unlink()
+        except OSError:
+            pass
+
+
+def _acquire_session_lock(session_id: str) -> bool:
+    """セッションIDのロックファイルを取得する.
+
+    Args:
+        session_id: セッションID.
+
+    Returns:
+        ロック取得に成功した場合True、既にロックされている場合False.
+    """
+    try:
+        _LOCK_DIR.mkdir(parents=True, exist_ok=True)
+        lock_path = _LOCK_DIR / f"{session_id}.lock"
+        lock_path.touch(exist_ok=False)
+        return True
+    except FileExistsError:
+        return False
+    except OSError:
+        logger.warning(
+            "ロックファイルの取得に失敗しました。処理を続行します。(session_id=%s)",
+            session_id,
+        )
+        return True
 
 
 def _read_hook_input() -> dict:
@@ -121,6 +163,9 @@ def main() -> None:
     if os.getenv("CLAUDE_SKIP_ANALYSIS") == "1":
         sys.exit(0)
 
+    # 古いロックファイルのクリーンアップ
+    _cleanup_stale_locks()
+
     hook_input = _read_hook_input()
 
     transcript_path = hook_input.get("transcript_path", "")
@@ -128,6 +173,14 @@ def main() -> None:
 
     if not transcript_path:
         logger.error("transcript_pathが指定されていません。")
+        sys.exit(0)
+
+    # 重複実行防止: 同一セッションIDの2回目以降をスキップ
+    if session_id and not _acquire_session_lock(session_id):
+        logger.info(
+            "セッションは既に処理済みです。スキップします。(session_id=%s)",
+            session_id,
+        )
         sys.exit(0)
 
     try:
