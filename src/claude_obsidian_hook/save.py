@@ -14,7 +14,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from claude_obsidian_hook.config import OBSIDIAN_CLI
+from claude_obsidian_hook.config import OBSIDIAN_CLI, OBSIDIAN_HISTORY_PATH
 from claude_obsidian_hook.transcript import (
     extract_messages,
     extract_metadata,
@@ -139,7 +139,7 @@ def main() -> None:
 
         # Obsidianに保存
         timestamp = _generate_timestamp_filename()
-        obsidian_path = f"coding/history/{timestamp}.md"
+        obsidian_path = f"{OBSIDIAN_HISTORY_PATH}/{timestamp}.md"
         _save_to_obsidian(obsidian_path, markdown)
 
         # reflect.pyをバックグラウンドで起動

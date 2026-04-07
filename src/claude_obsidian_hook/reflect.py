@@ -17,6 +17,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from claude_obsidian_hook.config import CLAUDE_CLI, OBSIDIAN_CLI
 from claude_obsidian_hook.transcript import (
     extract_messages,
     extract_metadata,
@@ -24,8 +25,6 @@ from claude_obsidian_hook.transcript import (
     parse_transcript,
 )
 
-CLAUDE_CLI = os.environ.get("CLAUDE_CLI", "/usr/local/bin/claude")
-OBSIDIAN_CLI = os.environ.get("OBSIDIAN_CLI", "/usr/local/bin/obsidian")
 REFLECTIONS_PATH = "coding/reflections.md"
 LOG_DIR = Path.home() / ".claude" / "logs"
 LOG_FILE = LOG_DIR / "obsidian-hook.log"
