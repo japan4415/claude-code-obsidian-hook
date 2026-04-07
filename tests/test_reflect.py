@@ -35,6 +35,19 @@ class TestGenerateReflection:
         assert "--model" in cmd
         assert "claude-haiku-4-5-20251001" in cmd
 
+    def test_passes_skip_analysis_env(self):
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "結果"
+
+        with patch("claude_obsidian_hook.reflect.subprocess.run") as mock_run:
+            mock_run.return_value = mock_result
+            generate_reflection("test")
+
+        call_kwargs = mock_run.call_args[1]
+        assert "env" in call_kwargs
+        assert call_kwargs["env"]["CLAUDE_SKIP_ANALYSIS"] == "1"
+
     def test_api_failure_handling(self):
         mock_result = MagicMock()
         mock_result.returncode = 1
